@@ -26,7 +26,7 @@ _button, _submit = st.button, st.form_submit_button
 st.button = lambda *a, **k: _button(*a, **{"width": "stretch", **k})
 st.form_submit_button = lambda *a, **k: _submit(*a, **{"width": "stretch", **k})
 
-for k in ("GEMINI_API_KEY", "KAKAO_JS_KEY"):        # 키는 Streamlit Secrets에만
+for k in ("GEMINI_API_KEY", "GEMINI_MODEL", "KAKAO_JS_KEY"):        # 키는 Streamlit Secrets에만
     try:
         if k in st.secrets and not os.environ.get(k):
             os.environ[k] = st.secrets[k]
@@ -413,7 +413,7 @@ def page_profile():
     html(fui.kv([("이름", S.f.get("name", "-")), ("농장·구매처", S.f.get("business", "-")), ("지역", S.f.get("region", "-")),
                  ("납품 신청", f"{len(list_trials())}건")]))
     fui.hint()
-    html('<p class="helper">AI: ' + ("Gemini 연결됨" if ai.has_ai() else "데모 모드 (키 없음)") + " · 입력 내용은 시연용이에요.</p>")
+    html('<p class="helper">AI: ' + ("Gemini 연결됨" if ai.has_ai() else ("데모 모드 (?demo=1)" if ai.demo_forced() else "데모 모드 (키 없음)")) + " · 입력 내용은 시연용이에요.</p>")
     st.button("처음으로 · 고객 유형 바꾸기", on_click=reset)
 
 
@@ -503,20 +503,21 @@ def page_interview():
     audio = st.audio_input("말로 답하기", key=f"rec{iv.turn}", label_visibility="collapsed")
     if audio is not None and S.get("heard") != (iv.turn, len(audio.getvalue())):
         S.heard = (iv.turn, len(audio.getvalue()))
-        if ai.has_ai():
+        if iv.ai:
             with st.spinner("AI가 받아쓰고 있어요"):
                 try:
                     said = voice.transcribe(audio.getvalue(), audio.type)
-                except Exception as e:
-                    said = None; st.error(f"받아쓰기 실패: {e}")
+                except Exception as e:      # 실패하면 자동으로 데모 모드로 이어감
+                    said = None; iv.ai, iv.fallback = False, str(e)[:120]; S.demo_note = True
             if said:
                 S.last_said = said
                 iv.answer(said); st.rerun()
         else:
             S.demo_note = True
-    if S.get("demo_note") and not ai.has_ai():
-        html('<div class="demo-note"><span class="demo-dot"></span>데모 모드: 키가 없어 녹음을 받아쓸 수 없어요. 예시 답변으로 이어가 주세요</div>')
-    if not ai.has_ai():
+    if (S.get("demo_note") or iv.fallback) and not iv.ai:
+        why = "AI 연결이 안 돼서" if iv.fallback else "키가 없어"
+        html(f'<div class="demo-note"><span class="demo-dot"></span>데모 모드: {why} 녹음을 받아쓸 수 없어요. 예시 답변으로 이어가 주세요</div>')
+    if not iv.ai:
         if st.button("예시 답변으로 대답하기", icon=":material/record_voice_over:"):
             S.last_said = iv.demo_answer(); iv.answer(S.last_said); st.rerun()
     with st.container(key="typed", horizontal=True, vertical_alignment="bottom"):
@@ -537,7 +538,7 @@ def page_transcribing():
         with box.container():
             html(f'<div class="loading-page" style="height:auto;padding:50px 0 10px;gap:20px"><div class="spinner"></div>'
                  f'<h1 style="font-size:25px">이야기를 정리하고 있어요</h1><p style="color:var(--farm-secondary-text)">'
-                 f'{"Gemini가 대화를 표로 정리하는 중" if ai.has_ai() else "데모: 예시 정리 결과를 준비하는 중"}</p>'
+                 f'{"Gemini가 대화를 표로 정리하는 중" if S.iv.ai else "데모: 예시 정리 결과를 준비하는 중"}</p>'
                  f'<div class="ai-steps">{steps_html}</div></div>')
     show(0); time.sleep(0.4); show(1)
     try:
