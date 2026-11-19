@@ -10,6 +10,7 @@ import base64
 import datetime as dt
 import pandas as pd
 import streamlit as st
+import streamlit.components.v1 as components
 
 from farm import ai, fui, voice, matching
 from farm.fui import html, icon, esc, title
@@ -478,14 +479,37 @@ def tts_button(text, key):
     import streamlit.components.v1 as components
     components.html(f"""<button onclick='speechSynthesis.cancel();var u=new SpeechSynthesisUtterance({json.dumps(text)});u.lang="ko-KR";u.rate=0.9;speechSynthesis.speak(u)'
       style='width:100%;min-height:52px;border:1px solid #dfe8d5;border-radius:13px;background:#fff;color:#153f3d;font:600 16px Pretendard,sans-serif;
-      display:flex;align-items:center;justify-content:center;gap:9px;cursor:pointer'>
+      display:flex;align-items:center;justify-content:center;gap:9px;cursor:pointer;margin:1px 0 4px'>
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-      <path d="m3 9 5 0 5-5v16l-5-5H3ZM17 8c3 2 3 6 0 8M20 4c6 5 6 11 0 16"/></svg>질문 듣기</button>""", height=58)
+      <path d="m3 9 5 0 5-5v16l-5-5H3ZM17 8c3 2 3 6 0 8M20 4c6 5 6 11 0 16"/></svg>질문 듣기</button>""", height=62)
+
+
+STT = components.declare_component("stt", path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "farm", "stt"))
+
+
+def reply(iv, text):
+    """선배님 답 1개 → (AI) 다음 질문"""
+    S.last_said = text
+    if iv.ai:
+        with st.spinner("AI가 다음 질문을 생각하고 있어요"):
+            iv.answer(text)
+    else:
+        iv.answer(text)
+    st.rerun()
 
 
 def page_interview():
     if "iv" not in S:
-        S.iv = voice.Interview()
+        if ai.has_ai():                  # AI가 첫 질문을 만드는 동안 '준비 중' 화면 (멈춘 것처럼 보이지 않게)
+            fui.hide_stale()
+            box = st.empty()
+            with box.container():
+                html('<div class="loading-page" style="height:auto;padding:110px 0 30px"><div class="spinner"></div>'
+                     '<h1 style="font-size:24px">AI가 첫 질문을 준비하고 있어요</h1><p>잠시만 기다려 주세요.</p></div>')
+            S.iv = voice.Interview()
+            box.empty()
+        else:
+            S.iv = voice.Interview()
     iv = S.iv
     title("선배님의 경험을 들려주세요", "그때의 거래가,\n누군가의 길이 되도록", "글로 쓰지 않아도 괜찮아요. AI가 여쭤보면 편하게 말씀해 주세요.")
     def history():
@@ -504,33 +528,35 @@ def page_interview():
         return
     html(f'<div class="interview-question"><span class="chip">{iv.turn + 1}번째 질문 · AI</span><h2>{esc(iv.question)}</h2></div>')
     tts_button(iv.question, f"tts{iv.turn}")
-    html(f'<div class="record-area" style="padding:0"><div class="wave">' +
-         "".join(f'<i style="height:{12 + (i * 17) % 35}px;animation-delay:{i * .07}s"></i>' for i in range(17)) +
-         '</div><p>아래 마이크를 눌러 말씀해 주세요</p></div>')
-    audio = st.audio_input("말로 답하기", key=f"rec{iv.turn}", label_visibility="collapsed")
-    if audio is not None and S.get("heard") != (iv.turn, len(audio.getvalue())):
-        S.heard = (iv.turn, len(audio.getvalue()))
-        if iv.ai:
-            with st.spinner("AI가 받아쓰고 있어요"):
-                try:
-                    said = voice.transcribe(audio.getvalue(), audio.type)
-                except Exception as e:      # 실패하면 자동으로 데모 모드로 이어감
-                    said = None; iv.ai, iv.fallback = False, str(e)[:120]; S.demo_note = True
-            if said:
-                S.last_said = said
-                iv.answer(said); st.rerun()
-        else:
-            S.demo_note = True
-    if (S.get("demo_note") or iv.fallback) and not iv.ai:
-        why = "AI 연결이 안 돼서" if iv.fallback else "키가 없어"
-        html(f'<div class="demo-note"><span class="demo-dot"></span>데모 모드: {why} 녹음을 받아쓸 수 없어요. 예시 답변으로 이어가 주세요</div>')
+    # ① 실시간 받아쓰기: 브라우저 음성 인식(키 없이 동작) → 말하는 동안 글자가 바로 보임
+    res = STT(key=f"stt{iv.turn}", default=None)
+    if res and res.get("text") and S.get("stt_id") != res.get("id"):
+        S.stt_id = res["id"]
+        reply(iv, res["text"])
+    # ② 예비: 녹음 파일을 Gemini가 받아쓰기 (음성 인식이 안 되는 브라우저용)
+    with st.expander("음성 인식이 안 되면: 녹음 파일로 보내기", expanded=bool(res and res.get("unsupported"))):
+        audio = st.audio_input("녹음하기", key=f"rec{iv.turn}", label_visibility="collapsed")
+        if audio is not None and S.get("heard") != (iv.turn, len(audio.getvalue())):
+            S.heard = (iv.turn, len(audio.getvalue()))
+            if iv.ai:
+                with st.spinner("AI가 받아쓰고 있어요"):
+                    try:
+                        said = voice.transcribe(audio.getvalue(), audio.type)
+                    except Exception as e:
+                        said = None; st.error("녹음 받아쓰기에 실패했어요. 위 마이크나 아래 글 입력을 써 주세요.")
+                if said:
+                    reply(iv, said)
+            else:
+                st.warning("녹음 파일 받아쓰기는 Gemini 키가 있어야 돼요. 위 마이크(실시간 받아쓰기)를 써 주세요.")
     if not iv.ai:
+        why = "AI 연결이 안 돼서" if iv.fallback else ("?demo=1 링크라서" if ai.demo_forced() else "키가 없어서")
+        html(f'<div class="demo-note"><span class="demo-dot"></span>데모 모드({why}): 받아쓰기는 실제로 되고, 다음 질문은 정해진 순서로 나와요</div>')
         if st.button("예시 답변으로 대답하기", icon=":material/record_voice_over:"):
-            S.last_said = iv.demo_answer(); iv.answer(S.last_said); st.rerun()
+            reply(iv, iv.demo_answer())
     with st.container(key="typed", horizontal=True, vertical_alignment="bottom"):
         typed = st.text_input("말 대신 글로 답해도 돼요", key=f"typed{iv.turn}")
         if st.button("보내기", width="content") and typed.strip():
-            S.last_said = typed; iv.answer(typed); st.rerun()
+            reply(iv, typed)
     history()
 
 
