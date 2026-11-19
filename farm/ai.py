@@ -66,3 +66,14 @@ def image_part(data: bytes, mime="image/jpeg"):
 def embed(texts):
     res = client().models.embed_content(model=EMBED_MODEL, contents=texts)
     return [e.values for e in res.embeddings]
+
+
+def transcribe(audio: bytes, mime="audio/wav"):
+    """녹음 → 한국어 받아쓰기 (은퇴농 음성 인터뷰)"""
+    from google.genai import types
+    res = client().models.generate_content(
+        model=MODEL,
+        contents=[types.Part.from_bytes(data=audio, mime_type=mime),
+                  "이 녹음은 강원도 농업인의 답변입니다. 사투리·숫자를 살려 한국어로 그대로 받아 적어 주세요. 받아 적은 문장만 출력하세요."],
+        config=types.GenerateContentConfig(temperature=0))
+    return res.text.strip()

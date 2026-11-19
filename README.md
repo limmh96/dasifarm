@@ -48,6 +48,9 @@ KAKAO_JS_KEY = "여기에_카카오_자바스크립트_키"
 
 | 피그마 | 코드 위치 |
 |---|---|
+| `모바일 00 · 고객 선택` (어떤 고객이세요?) | `P_START` — 앱 첫 화면 |
+| 판매처 등록 (공공데이터 불러오는 중 → 확인 → 없는 정보 입력) | `P_ONB_F` + `farm/onboard.py` |
+| 구매처 등록 (같은 3단계) | `P_ONB_B` + `farm/onboard.py` |
 | `모바일 01 · 홈` | `app.py` `P_HOME` |
 | (판로 물려주기 = AI 인터뷰) | `P_HANDOVER` `모바일 · 판로 물려주기` |
 | `모바일 06 · 판로 찾기` | `P_FIND` |
@@ -72,6 +75,11 @@ KAKAO_JS_KEY = "여기에_카카오_자바스크립트_키"
 - AI(Gemini)는 점수를 만들지 않고 **설명 문장만** 씀
 
 ## 6. 공공데이터 (자동 채움 → 확인 → 없으면 직접 입력)
+- 시연용 가상 공공데이터: `data/public_gap.csv`(GAP 인증 농가), `data/public_buyers.csv`(공공급식)
+  - 판매처: `다시농장` 또는 `GAP-2025-0731` 입력 → 이름·지역·품목·인증 자동 채움 / `없는농장` → 전부 직접 입력
+  - 구매처: `강릉학교급식` 입력 → 이름·지역·품목·인증·물량·요일 자동 채움
+- 실제 API로 바꿀 곳: `farm/data.py`의 `public_farmer()` `public_buyer()`
+- 은퇴 농업인: 질문 듣기(브라우저 음성) → 녹음 → Gemini 받아쓰기(`ai.transcribe`) → 대화형 인터뷰. 키가 없으면 글 입력으로 진행
 - 지금은 `buyers.csv`에서 `source = 공공데이터`인 행(가상 학교급식센터)으로 시연
 - GAP 인증 조회: `data/public_gap.csv`를 넣으면 `public_lookup("cert", 번호)`가 찾음. 없으면 직접 입력 화면으로 넘어감
 - 실제 API로 바꿀 곳: `farm/data.py`의 `public_lookup()` 한 함수

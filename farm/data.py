@@ -22,6 +22,7 @@ def _conn():
     c.executescript("""
     CREATE TABLE IF NOT EXISTS retirees (id INTEGER PRIMARY KEY AUTOINCREMENT, created TEXT, profile TEXT, transcript TEXT);
     CREATE TABLE IF NOT EXISTS buyers_extra (name TEXT PRIMARY KEY, row TEXT);
+    CREATE TABLE IF NOT EXISTS farmers_extra (name TEXT PRIMARY KEY, row TEXT);
     CREATE TABLE IF NOT EXISTS trials (id INTEGER PRIMARY KEY AUTOINCREMENT, created TEXT, farmer TEXT, buyer TEXT, qty TEXT, memo TEXT);
     """)
     return c
@@ -57,7 +58,23 @@ def load_buyers():
 
 
 def load_farmers():
-    return _norm(pd.read_csv(os.path.join(DATA, "farmers.csv")))
+    df = pd.read_csv(os.path.join(DATA, "farmers.csv"))
+    with _conn() as c:
+        extra = [json.loads(r[0]) for r in c.execute("SELECT row FROM farmers_extra")]
+    if extra:
+        df = pd.concat([df, pd.DataFrame(extra)], ignore_index=True)
+    return _norm(df)
+
+
+def save_farmer(row: dict):
+    """판매처(청년농) 등록: 공공데이터 확인값 + 직접 입력값"""
+    row = dict(row)
+    for k in ("items", "months", "days", "certs"):
+        if isinstance(row.get(k), list):
+            row[k] = ",".join(str(x) for x in row[k])
+    with _conn() as c:
+        c.execute("INSERT OR REPLACE INTO farmers_extra(name,row) VALUES (?,?)",
+                  (row["name"], json.dumps(row, ensure_ascii=False)))
 
 
 def save_retiree(profile: dict, transcript: list):
@@ -109,3 +126,38 @@ def public_lookup(kind: str, key: str):
             return None if hit.empty else hit.iloc[0].to_dict()
         return None
     return None
+
+
+# ── 등록 화면용: 공공데이터에서 찾은 값만 돌려주고, 못 찾은 항목은 화면에서 직접 입력 ──
+# 실제 서비스: 농산물우수관리(GAP) 인증 정보, 학교급식 식재료 정보 등 공공데이터 API로 교체
+def _find(df, key, cols):
+    key = str(key).strip()
+    if not key:
+        return None
+    hit = df[df[cols].astype(str).apply(lambda r: any(key in v or v in key for v in r), axis=1)]
+    return None if hit.empty else hit.iloc[0]
+
+
+def public_farmer(key):
+    """농가 이름 또는 GAP 인증번호 → {name, region, items, certs, cert_no}"""
+    path = os.path.join(DATA, "public_gap.csv")
+    if not os.path.exists(path):
+        return None
+    r = _find(pd.read_csv(path, dtype=str), key, ["인증번호", "농가명"])
+    if r is None:
+        return None
+    return {"name": r["농가명"], "region": r["시군구"], "items": _split(r["품목"]),
+            "certs": [r["인증종류"]], "cert_no": r["인증번호"], "_src": f"GAP 인증 정보 · 유효기간 {r['유효기간']}"}
+
+
+def public_buyer(key):
+    """기관 이름 → {name, type, location, items, cert, weekly_kg, days, lat, lng}"""
+    path = os.path.join(DATA, "public_buyers.csv")
+    if not os.path.exists(path):
+        return None
+    r = _find(pd.read_csv(path, dtype=str).fillna(""), key, ["기관명"])
+    if r is None:
+        return None
+    return {"name": r["기관명"], "type": r["유형"], "location": r["시군구"], "items": _split(r["품목"]),
+            "cert": r["요구인증"], "weekly_kg": int(r["주간사용량kg"]), "days": _split(r["납품요일"]),
+            "lat": float(r["위도"]), "lng": float(r["경도"]), "_src": "공공급식 식재료 정보"}

@@ -11,7 +11,8 @@ import streamlit.components.v1 as components
 from farm import ai, ui
 from farm.data import load_buyers, load_farmers, save_retiree, save_buyer, list_retirees, save_trial, list_trials, public_lookup, CRITERIA
 from farm.interview import Interview, run_structure, read_ledger
-from farm import matching
+from farm import matching, onboard
+import json
 
 st.set_page_config(page_title="다시, FARM", page_icon="🌱", layout="centered", initial_sidebar_state="collapsed")
 ui.inject_css()
@@ -25,13 +26,14 @@ for k in ("GEMINI_API_KEY", "KAKAO_JS_KEY"):
         pass
 
 # 피그마 프레임 이름
+P_START, P_ONB_F, P_ONB_B = "모바일 00 · 고객 선택", "모바일 · 판매처 등록", "모바일 · 구매처 등록"
 P_HOME, P_HANDOVER, P_FIND = "모바일 01 · 홈", "모바일 · 판로 물려주기", "모바일 06 · 판로 찾기"
 P_DETAIL, P_TRIAL, P_DONE = "모바일 07 · 구매처 상세", "모바일 08 · 시험 납품 신청", "모바일 · 시험 납품 신청 완료"
 P_BUYER, P_MY = "모바일 · 납품 조건 보기", "모바일 · 나의 다시팜"
-MENU = [("전체 메뉴", [("홈", P_HOME), ("판로 물려주기", P_HANDOVER), ("납품 조건 보기", P_BUYER),
+MENU = [("전체 메뉴", [("처음 화면 (고객 선택)", P_START), ("홈", P_HOME), ("판로 물려주기", P_HANDOVER), ("납품 조건 보기", P_BUYER),
                      ("판로 찾기", P_FIND), ("나의 다시팜", P_MY)])]
 
-st.session_state.setdefault("page", P_HOME)
+st.session_state.setdefault("page", P_START)
 st.session_state.setdefault("weights", dict(matching.WEIGHTS))
 st.session_state.setdefault("me", "청년농D")
 
@@ -74,8 +76,35 @@ def show_map(points):
         st.map(pd.DataFrame([{"lat": la, "lon": lo} for _, la, lo in points]), zoom=8, height=220)
 
 
+# ───────────────────────── 모바일 00 · 고객 선택 ─────────────────────────
+if page == P_START:
+    ui.html("<div class='df-pad' style='text-align:center;padding-top:90px'><p class='df-title'>어떤 고객이세요?</p>"
+            "<p class='df-sub' style='margin-bottom:26px'>고객에 맞는 화면으로 안내해 드릴게요.</p></div>")
+    with st.container(key="pad_roles"):
+        st.button("농산물 판매처 (청년)", width="stretch", key="role_f", on_click=go, args=(P_ONB_F,))
+        st.button("농산물 구매처", width="stretch", key="role_b", on_click=go, args=(P_ONB_B,))
+        st.button("은퇴 농업인", width="stretch", key="role_r", on_click=go, args=(P_HANDOVER,))
+    ui.html("<div class='df-pad' style='text-align:center;margin-top:18px'><span class='df-label'>"
+            "판매처·구매처는 공공데이터로 정보를 먼저 불러오고,<br>은퇴 농업인은 AI와 말로 대화하며 정리해요.</span></div>")
+
+
+def _farmer_done(row):
+    st.session_state.pop("me_custom", None)
+    go(P_FIND, me=row["name"])
+
+
+def _buyer_done(row):
+    go(P_BUYER, buyer_sel=row["name"])
+
+
+if page == P_ONB_F:
+    onboard.run("farmer", _farmer_done)
+
+elif page == P_ONB_B:
+    onboard.run("buyer", _buyer_done)
+
 # ───────────────────────── 모바일 01 · 홈 ─────────────────────────
-if page == P_HOME:
+elif page == P_HOME:
     ui.crumb("홈", "오늘 할 일", icon="home")
     trials, retirees = list_trials(), list_retirees()
     with st.container(key="gcard_home"):
@@ -99,20 +128,39 @@ if page == P_HOME:
 elif page == P_HANDOVER:
     ui.crumb("판로 물려주기", "AI 인터뷰", icon="swap")
     ui.hero("판로 물려주기 · 은퇴 예정 농가", "AI가 여쭤보면<br>편하게 답해 주세요",
-            "말로 답하셔도 되고, 담당자가 옆에서 대신 입력해도 됩니다.")
-    tab1, tab2 = st.tabs(["대화로 정리", "장부 사진 읽기"])
+            "AI가 질문을 읽어 드려요. 녹음 버튼을 누르고 말로 답하시면 받아 적어요.")
+    tab1, tab2 = st.tabs(["말로 대화하기", "장부 사진 읽기"])
     with tab1:
         if "iv" not in st.session_state:
             st.session_state.iv = Interview()
-        if st.button("처음부터 다시", width="content"):
-            st.session_state.iv = Interview(); st.session_state.pop("iv_result", None)
         iv = st.session_state.iv
-        for who, msg in iv.log:
-            st.chat_message(who).write(msg)
         if not iv.done:
-            if ans := st.chat_input("답변을 입력하세요"):
+            q = next((m for w, m in reversed(iv.log) if w == "assistant"), "")
+            with st.container(key="gcard_q"):
+                ui.html(ui.chip("AI 질문") + f"<p class='df-name' style='font-size:19px !important;line-height:1.5'>{q}</p>")
+                st.html(f"""<button onclick='speechSynthesis.cancel();var u=new SpeechSynthesisUtterance({json.dumps(q)});u.lang="ko-KR";u.rate=0.9;speechSynthesis.speak(u)'
+                    style='width:100%;padding:10px;border:1px solid #E2E5E0;border-radius:8px;background:#fff;font-size:14px;font-weight:700;cursor:pointer'>
+                    🔊 질문 듣기</button>""", unsafe_allow_javascript=True)
+                audio = st.audio_input("🎙 눌러서 말로 답하기", key=f"rec_{len(iv.log)}")
+            if audio is not None:
+                if ai.has_ai():
+                    with st.spinner("말씀을 받아 적는 중…"):
+                        try:
+                            said = ai.transcribe(audio.getvalue(), audio.type or "audio/wav")
+                        except Exception as e:
+                            said = None; st.error(f"받아쓰기 실패: {e}")
+                    if said:
+                        iv.reply(said); st.rerun()
+                else:
+                    st.info("데모 모드: 녹음을 글로 바꾸려면 Gemini 키가 필요해요. 아래 칸에 글로 입력해 주세요.")
+            if ans := st.chat_input("말 대신 글로 입력해도 돼요"):
                 iv.reply(ans); st.rerun()
-        else:
+        with st.expander(f"지금까지 나눈 대화 ({len(iv.log)})", expanded=iv.done):
+            for who, msg in iv.log:
+                st.chat_message(who).write(msg)
+        if st.button("처음부터 다시", width="content"):
+            st.session_state.iv = Interview(); st.session_state.pop("iv_result", None); st.rerun()
+        if iv.done:
             if "iv_result" not in st.session_state:
                 with st.spinner("대화를 표로 정리하는 중…"):
                     st.session_state.iv_result = run_structure(iv)
@@ -288,43 +336,20 @@ elif page == P_BUYER:
     ui.crumb("납품 조건 보기", "후속 공급자 찾기", icon="box")
     ui.hero("구매처 · 납품 조건", "우리 조건에 맞는<br>다음 농가를 찾아요",
             "같은 점수표를 구매처 입장에서 거꾸로 조회합니다.")
-    tab1, tab2 = st.tabs(["후보 농가", "조건 등록"])
-    with tab1:
-        buyers = load_buyers()
-        bname = st.selectbox("구매처", buyers["name"], key="buyer_sel")
-        cands = matching.recommend_for_buyer(bname, top=3, weights=st.session_state.weights)
-        if not cands:
-            st.info("조건을 통과한 농가가 없습니다.")
-        for i, r in enumerate(cands):
-            ui.match_card(r, key=f"c{i}", who="farmer")
-    with tab2:
-        q = st.text_input("구매처 이름으로 공공데이터 조회", "학교급식")
-        hit = public_lookup("buyer", q) if q else None
-        if hit:
-            with st.container(key="gcard_pub"):
-                ui.html("<p class='df-card-title'>공공데이터에서 찾았어요</p><p class='df-sub'>미리 채운 값이 맞는지 확인해 주세요.</p>"
-                        + ui.kv("이름", hit["name"]) + ui.kv("품목", "/".join(hit["items"]))
-                        + ui.kv("수량·단가", f"주 {int(hit['weekly_kg'])}kg · {int(hit['price_kg']):,}원/kg")
-                        + ui.kv("요일·인증", f"{'/'.join(hit['days'])} · {hit['cert'] or '없음'}"))
-                st.button("맞아요", type="primary", width="stretch")
-        else:
-            st.caption("공공데이터에 없어요. 직접 입력해 주세요.")
-            with st.form("buyer"):
-                nm = st.text_input("구매처 이름")
-                tp = st.selectbox("유형", ["식당", "반찬가게", "마트", "도매상", "식자재업체", "로컬푸드 직매장"])
-                items = st.multiselect("품목", ["감자", "토마토"], ["감자"])
-                c1, c2 = st.columns(2)
-                boxes = c1.number_input("주당 필요(20kg 상자)", 1, 1000, 10)
-                price = c2.number_input("상자당 단가", 5000, 100000, 25000, step=1000)
-                grade = st.select_slider("최소 등급", ["무관", "중", "상", "특"], "상")
-                months = st.multiselect("필요한 월", list(range(1, 13)), [7, 8, 9, 10, 11])
-                days = st.multiselect("납품 요일", list("월화수목금토"), ["화"])
-                if st.form_submit_button("등록", type="primary", width="stretch") and nm:
-                    save_buyer({"name": nm, "type": tp, "size": "소형", "source": "직접 입력", "from_farmer": "—", "location": "강원",
-                                "lat": 37.64, "lng": 128.56, "items": items, "min_grade": {"무관": 1, "중": 2, "상": 3, "특": 4}[grade],
-                                "weekly_kg": boxes * 20, "price_kg": price / 20, "months": months, "days": days,
-                                "delivery": "", "settlement": "", "cert": "", "raw_text": f"{nm} {tp} 직접 입력"})
-                    st.success("등록했어요.")
+    buyers = load_buyers()
+    names = list(buyers["name"])
+    if st.session_state.get("buyer_sel") not in names:
+        st.session_state.buyer_sel = names[0]
+    with st.container(key="wcard_bsel"):
+        bname = st.selectbox("구매처", names, key="buyer_sel")
+    cands = matching.recommend_for_buyer(bname, top=3, weights=st.session_state.weights)
+    ui.html(f"<div class='df-pad'><p class='df-card-title' style='margin:6px 0 0'>추천 농가 {len(cands)}곳</p></div>")
+    if not cands:
+        st.info("조건을 통과한 농가가 없습니다.")
+    for i, r in enumerate(cands):
+        ui.match_card(r, key=f"c{i}", who="farmer")
+    with st.container(key="pad_newb"):
+        st.button("새 구매처 등록하기", width="stretch", on_click=go, args=(P_ONB_B,))
 
 # ───────────────────────── 나의 다시팜 (데이터 · 매칭 기준) ─────────────────────────
 elif page == P_MY:

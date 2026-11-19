@@ -101,6 +101,13 @@ def inject_css():
       .df-bar {{ height:6px; border-radius:6px; background:{tok('color/border')}; overflow:hidden; }}
       .df-bar > div {{ height:6px; background:{tok('color/primary')}; }}
 
+      /* 고객 선택 버튼 (모바일 00) */
+      .st-key-pad_roles {{ gap:14px; }}
+      .st-key-pad_roles .stButton button {{ min-height:64px; font-size:17px !important; font-weight:700;
+          border:1.5px solid {tok('color/text')}; border-radius:12px; background:#fff; }}
+      .st-key-pad_roles .stButton button p {{ font-size:17px !important; }}
+      .st-key-pad_roles .stButton button:hover {{ border-color:{tok('color/primary')}; color:{tok('color/primary')}; background:{tok('color/primary-soft')}; }}
+
       /* Menu popover */
       [data-testid="stPopoverBody"] {{ width:240px; }}
       [data-testid="stPopoverBody"] .stButton button, [data-testid="stPopoverBody"] .stButton button > div {{ justify-content:flex-start; text-align:left; border:none; background:transparent; min-height:34px; font-weight:600; }}
