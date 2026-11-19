@@ -36,22 +36,21 @@ _cache = {}
 
 
 def vectors(texts):
-    out = []
-    need = [t for t in texts if t not in _cache]
+    """AI 임베딩과 임시 벡터는 길이가 달라 섞이면 안 됨 → 방식별로 따로 저장"""
+    mode = "ai" if ai.has_ai() else "fake"
+    need = [t for t in texts if (mode, t) not in _cache]
     if need:
-        if ai.has_ai():
+        if mode == "ai":
             try:
                 for t, v in zip(need, ai.embed(need)):
-                    v = np.array(v); _cache[t] = v / (np.linalg.norm(v) or 1)
+                    v = np.array(v); _cache[("ai", t)] = v / (np.linalg.norm(v) or 1)
             except Exception:
-                for t in need:
-                    _cache[t] = _fake_vec(t)
-        else:
-            for t in need:
-                _cache[t] = _fake_vec(t)
-    for t in texts:
-        out.append(_cache[t])
-    return out
+                mode = "fake"
+        if mode == "fake":
+            for t in texts:
+                if ("fake", t) not in _cache:
+                    _cache[("fake", t)] = _fake_vec(t)
+    return [_cache[(mode, t)] for t in texts]
 
 
 def buyer_text(b):
@@ -65,7 +64,10 @@ def farmer_text(y):
 
 
 def similarity(y, b):
-    vy, vb = vectors([farmer_text(y), buyer_text(b)])
+    ty, tb = farmer_text(y), buyer_text(b)
+    vy, vb = vectors([ty, tb])
+    if vy.shape != vb.shape:                       # 혹시 길이가 다르면 임시 벡터로 다시 비교
+        vy, vb = _fake_vec(ty), _fake_vec(tb)
     return float(max(0.0, min(1.0, np.dot(vy, vb))))
 
 
