@@ -146,9 +146,9 @@ def page_import():
     title("정보 등록 · 1 / 3", "입력은 가볍게,\n시작은 간편하게", "기본 정보를 불러오면 필요한 내용만 채울 수 있어요.")
     html(f'<div class="mini-art">{icon("sprout" if seller else "shop", 46)}</div>')
     fui.hint()
-    name = st.text_input("대표자 이름", S.f.get("name", ""), placeholder="이름을 입력해 주세요")
+    name = st.text_input("대표자 이름", S.f.get("name") or ("김초록" if seller else "박급식"), placeholder="이름을 입력해 주세요")
     idlabel = "농업경영체 등록번호 / GAP 인증번호" if seller else "사업자등록번호 / 기관 이름"
-    rid = st.text_input(idlabel, S.f.get("id", ""), placeholder="시연: GAP-2025-0731 / 강릉학교급식" if seller else "시연: 강릉학교급식")
+    rid = st.text_input(idlabel, S.f.get("id") or ("GAP-2025-0731" if seller else "강릉학교급식"), placeholder="시연: GAP-2025-0731 / 강릉학교급식" if seller else "시연: 강릉학교급식")
     html('<p class="helper">끝 4자리가 0000이거나 공공데이터에 없으면 ‘조회 결과 없음’을 체험해요.</p>')
     if st.button("정보 불러오기", type="primary"):
         if not name.strip() or not rid.strip():
@@ -211,9 +211,9 @@ def page_missing():
     title("정보 등록 · 3 / 3", "조금만 더 알려주시면\n준비가 끝나요", "맞는 거래 상대를 찾기 위해 필요한 정보예요.")
     with st.form("missing"):
         if manual:
-            name = st.text_input("대표자 이름 *", S.f.get("name", ""), placeholder="예: 김초록")
-            biz = st.text_input(("농장 이름" if seller else "사업장 이름") + " *", placeholder="이름을 입력해 주세요")
-            region = st.text_input("소재지 *", placeholder="예: 강원 평창군 진부면")
+            name = st.text_input("대표자 이름 *", S.f.get("name") or ("김초록" if seller else "박급식"), placeholder="예: 김초록")
+            biz = st.text_input(("농장 이름" if seller else "사업장 이름") + " *", "새봄농장" if seller else "새봄식당", placeholder="이름을 입력해 주세요")
+            region = st.text_input("소재지 *", "평창군 진부면", placeholder="예: 강원 평창군 진부면")
             crop = st.multiselect(("생산 품목" if seller else "구매 희망 품목") + " *", ["감자", "토마토"], ["감자"])
         if seller:
             boxes = st.number_input("주당 출하 가능 물량 (20kg 상자) *", 1, 2000, 30)
@@ -229,7 +229,7 @@ def page_missing():
             months = st.multiselect("필요한 월", list(range(1, 13)), [7, 8, 9, 10, 11], format_func=lambda m: f"{m}월")
             days = st.multiselect("납품 받는 요일", list("월화수목금토"), pub.get("days") or ["화"])
             deliv = st.selectbox("받는 방식", ["직접 트럭 납품", "택배", "구매처가 수거", "화물 용달"])
-        note = st.text_input("추가로 알리고 싶은 조건 (선택)", placeholder="예: 크기별 선별 가능, 세척 출하")
+        note = st.text_input("추가로 알리고 싶은 조건 (선택)", "크기별 선별 가능, 세척 출하" if seller else "크기 고른 감자 선호, 월말 정산", placeholder="예: 크기별 선별 가능, 세척 출하")
         html('<p class="helper">* 필수 정보예요. 입력한 내용은 이번 시연에서만 유지돼요.</p>')
         ok = st.form_submit_button("등록 완료하기", type="primary")
     if ok:
@@ -368,7 +368,7 @@ def page_apply():
         item = st.text_input("납품 품목 *", ", ".join(S.f.get("crop", [])) or "감자")
         qty = st.text_input("제안 물량 *", "20kg 상자 5개")
         day = st.date_input("희망 납품일 *", dt.date.today() + dt.timedelta(days=5))
-        memo = st.text_area("구매처에 전할 이야기 (선택)", placeholder="재배와 포장 준비 상황을 알려주세요")
+        memo = st.text_area("구매처에 전할 이야기 (선택)", "8월부터 주 2회, 크기별로 선별해 상자 포장으로 납품할 수 있어요.", placeholder="재배와 포장 준비 상황을 알려주세요")
         html('<div class="source-box">시연 신청은 실제 구매처에 전달되지 않아요.</div>')
         if st.form_submit_button("시험 납품 제안하기", type="primary"):
             save_trial(r["청년농"], r["거래처"], f"{item} {qty}", f"{day} · {memo}")
@@ -678,7 +678,7 @@ def page_interview():
         if st.button("예시 답변으로 대답하기", icon=":material/record_voice_over:"):
             reply(iv, iv.demo_answer())
     with st.container(key="typed", horizontal=True, vertical_alignment="bottom"):
-        typed = st.text_input("말 대신 글로 답해도 돼요", key=f"typed{iv.turn}")
+        typed = st.text_input("말 대신 글로 답해도 돼요", "" if iv.ai else iv.demo_answer(), key=f"typed{iv.turn}")
         if st.button("보내기", width="content") and typed.strip():
             reply(iv, typed)
     history()
