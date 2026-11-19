@@ -233,6 +233,13 @@ def page_missing():
         ok = st.form_submit_button("등록 완료하기", type="primary")
     if ok:
         if manual:
+            import re
+            def real(v):   # 한글 2글자 이상 (asd 같은 시험 입력 막기)
+                return len(re.findall(r"[가-힣]", str(v))) >= 2
+            if not (real(name) and real(biz)):
+                st.error("이름과 사업장 이름은 한글로 2글자 이상 적어 주세요."); return
+            if not any(k in region for k in COORDS):
+                st.error("소재지에 강원 시·군 이름을 넣어 주세요. 예: 평창군 진부면, 강릉시 (평창·강릉·정선·원주·춘천·삼척·홍천)"); return
             S.f.update(name=name, business=biz, region=region, crop=crop)
         if not (S.f.get("business") and S.f.get("crop")):
             st.error("필수 정보를 입력해 주세요."); return
