@@ -1,85 +1,47 @@
-# 다시 FARM 프로토타입 (Streamlit)
+# 다시, FARM — 피그마 디자인 Streamlit 버전
 
-은퇴 농업인의 거래처(판로)를 청년 농업인에게 잇는 AI 매칭 시연용 앱.
-**모든 이름·수치는 가상 데이터**입니다.
+피그마(Figma Make)로 만든 '다시팜' 앱의 **CSS·폰트·로고·농장 그림을 그대로 가져와** Streamlit으로 옮긴 시연 앱입니다.
+모든 이름·수치는 시연용 가상 데이터입니다.
 
-## 1. 실행 (내 노트북)
-
+## 실행
 ```bash
 pip install -r requirements.txt
 streamlit run app.py
 ```
-
-키 없이도 **데모 모드**로 전 화면이 동작합니다 (정해진 질문 순서, 템플릿 설명, 임시 벡터).
-
-### API 키 넣기 (선택)
-`.streamlit/secrets.toml` 파일을 만들고 아래처럼 적습니다. **이 파일은 GitHub에 올리지 않습니다** (`.gitignore`에 포함됨).
-
+Gemini 키는 `.streamlit/secrets.toml`(로컬) 또는 Streamlit Cloud **Secrets**에만 넣습니다. GitHub·카톡 금지.
 ```toml
-GEMINI_API_KEY = "여기에_키"
-KAKAO_JS_KEY = "여기에_카카오_자바스크립트_키"
-# GEMINI_MODEL = "gemini-2.5-flash"   # AI Studio에서 현재 쓸 수 있는 Flash 모델명으로 바꿔도 됨
+GEMINI_API_KEY = "키"
+# GEMINI_MODEL = "AI Studio에서 쓸 수 있는 최신 Flash 모델명"
 ```
+키가 없으면 데모 모드(정해진 질문 순서 + 예시 답변, 예시 정리 결과, 글자 비교 유사도, 문장 틀 설명)로 같은 흐름이 돌아갑니다.
+마이크 녹음은 https(배포 주소) 또는 localhost에서만 브라우저가 허용합니다.
 
-## 2. 배포 (Streamlit Cloud)
-1. 이 폴더를 GitHub 저장소에 올림 (secrets.toml 제외 확인)
-2. share.streamlit.io → New app → 저장소·`app.py` 선택
-3. App settings → **Secrets**에 위 toml 내용 붙여넣기
-4. 카카오 개발자 콘솔 → 앱 → 플랫폼 → Web 도메인에 `https://○○.streamlit.app` 추가
+## AI가 쓰이는 곳
+| 화면 | AI | 코드 |
+|---|---|---|
+| 은퇴 농업인 → 음성 인터뷰: AI가 질문(화면+소리로 읽기) → 선배님이 말로 답함 | **Gemini** 받아쓰기 + **Gemini**가 다음 질문 생성(숫자 되묻기, 빠진 항목 질문, 거래처마다 반복) | `farm/voice.py` `Interview` |
+| "이야기를 정리하고 있어요" → "이렇게 정리했어요" | **Gemini**가 대화를 거래처별 **품목·규격·납품량·주기·배송거리·정산주기**(+단가) 표로 정리. 배송거리는 위치로 코드 계산 | `voice.Interview.structure()` |
+| 판매처 → 판로 찾기 "AI가 적합도를 분석하고 있어요" / 구매처 → 추천 농가 | 매칭 AI: 7가지 기준 점수 + **Gemini 임베딩** 의미 유사도 → 매칭률 | `farm/matching.py` |
+| 구매처 상세 "AI 추천 이유" | **Gemini**가 점수·근거를 문장으로 설명 | `matching.explain()` |
 
-## 3. 구조
+## 시연 순서 (각 2분 내외)
+- **은퇴 농업인**: 고객 선택 → 은퇴 농업인 → 다음 → AI 질문(질문 듣기) → 마이크로 답하기(키 없으면 "예시 답변으로 대답하기") × 7 → AI로 정리하기 → 거래처별 항목 확인 → 저장
+  - 예: "매주 화요일 아침 감자 200상자 납품, 크기 기준 엄격, 월말 정산" → 품목 감자 · 규격 크기 기준 엄격 · 납품량 주 4,000kg · 주기 매주 화요일 아침 · 정산주기 월말
+- **판매처(청년)**: 농산물 판매처 → 이름 + `GAP-2025-0731` → 불러오기 → 확인 → 정보 입력 → 판로 찾기(AI 적합도 분석) → 구매처 상세(점수·AI 추천 이유) → 시험 납품 신청
+- **구매처**: 농산물 구매처 → 이름 + `강릉학교급식` → 불러오기 → 확인 → 등록 → 추천 농가(AI 적합도)
+- 등록번호 끝을 `0000`으로 넣으면 "조회 결과 없음 → 직접 입력" 흐름
 
-| 파일 | 역할 |
+## 피그마 연동
+| 피그마(App.tsx) | Streamlit |
 |---|---|
-| `app.py` | 화면 (페이지 이름 = 피그마 프레임 이름) |
-| `farm/interview.py` | **모델 1** 은퇴농 대화형 인터뷰 AI + 대화→표 정리 + 장부 사진 읽기 |
-| `farm/matching.py` | **모델 2** 적합도 분석 AI (필수조건 → 6기준 점수 → 유사도 → 가중합 → AI 설명) |
-| `farm/data.py` | CSV 불러오기, SQLite 저장(`farm.db` 자동 생성), 공공데이터 조회 자리 |
-| `farm/ai.py` | Gemini 연결 (키 없으면 데모 모드) |
-| `farm/ui.py` | 피그마 컴포넌트와 같은 이름의 화면 부품 |
-| `design/tokens.json` | 피그마 Variables와 같은 이름의 색·글꼴·모서리 값 |
-| `data/*.csv` | 가상 구매처 7곳, 청년농 5명, 장부 정답 데이터 |
+| `src/index.css` (빌드본) | `design/figma.css` 그대로 주입 |
+| 버튼 `.primary/.secondary`, 입력칸 `.field` | `farm/fui.py` OVERRIDE에서 Streamlit 위젯을 같은 모양으로 |
+| 화면 `page === "welcome"` 등 | `app.py`의 `page_welcome()` 등 같은 이름 |
+| 농장 그림 `<Farm/>`, 아이콘 `<Icon/>` | `design/farm.svg`, `fui.icon()` |
+| 폰트·로고 | `static/` (`enableStaticServing`) |
+피그마에서 색을 바꾸면 빌드한 CSS를 `design/figma.css`로 다시 복사하면 됩니다.
 
-데이터 흐름: 인터뷰 저장 → `buyers_extra` 표에 구매처 추가 → `판로 찾기`에서 바로 매칭 대상이 됨.
-
-## 4. 피그마 연동 표
-
-화면은 **모바일 390px** 기준이고 피그마 프레임 이름을 그대로 페이지 이름으로 씁니다. 자동 동기화가 아니라 **이름을 맞춰 두고 값을 옮겨 적는 방식**입니다.
-
-| 피그마 | 코드 위치 |
-|---|---|
-| `모바일 00 · 고객 선택` (어떤 고객이세요?) | `P_START` — 앱 첫 화면 |
-| 판매처 등록 (공공데이터 불러오는 중 → 확인 → 없는 정보 입력) | `P_ONB_F` + `farm/onboard.py` |
-| 구매처 등록 (같은 3단계) | `P_ONB_B` + `farm/onboard.py` |
-| `모바일 01 · 홈` | `app.py` `P_HOME` |
-| (판로 물려주기 = AI 인터뷰) | `P_HANDOVER` `모바일 · 판로 물려주기` |
-| `모바일 06 · 판로 찾기` | `P_FIND` |
-| `모바일 07 · 구매처 상세` | `P_DETAIL` |
-| `모바일 08 · 시험 납품 신청` | `P_TRIAL` |
-| `모바일 · 시험 납품 신청 완료` | `P_DONE` |
-| 메뉴 `납품 조건 보기` (구매처 쪽) | `P_BUYER` |
-| 메뉴 `나의 다시팜` (가중치·기록) | `P_MY` |
-| `00. 다시 FARM 공통 디자인` 색 변수 | `design/tokens.json` + `.streamlit/config.toml` |
-| 헤더(다시, FARM + 메뉴) / 경로표시 / 큰 제목 | `farm/ui.py` `header()` `crumb()` `hero()` |
-| 연두 카드 / 흰 카드 / 노랑 카드 | `st.container(key="gcard_…" / "wcard_…" / "ycard_…")` |
-| Chip / ScoreBar / 판로 카드 | `chip()` `score_bar()` `match_card()` |
-
-## 5. 매칭률 계산
-
-```
-매칭률 = Σ(항목 점수 0~1 × 가중치) ÷ 가중치 합 × 100
-```
-- 필수조건(품목 불일치, 요구 인증 없음)은 점수 전에 제외
-- 가중치 기본값(예시): 물량 25 · 품질 15 · 가격 15 · 주기 15 · 거리 15 · 인증 5 · 유사도 10
-- `데이터 · 매칭 기준` 화면에서 슬라이더로 바로 바꿔볼 수 있음
-- AI(Gemini)는 점수를 만들지 않고 **설명 문장만** 씀
-
-## 6. 공공데이터 (자동 채움 → 확인 → 없으면 직접 입력)
-- 시연용 가상 공공데이터: `data/public_gap.csv`(GAP 인증 농가), `data/public_buyers.csv`(공공급식)
-  - 판매처: `다시농장` 또는 `GAP-2025-0731` 입력 → 이름·지역·품목·인증 자동 채움 / `없는농장` → 전부 직접 입력
-  - 구매처: `강릉학교급식` 입력 → 이름·지역·품목·인증·물량·요일 자동 채움
-- 실제 API로 바꿀 곳: `farm/data.py`의 `public_farmer()` `public_buyer()`
-- 은퇴 농업인: 질문 듣기(브라우저 음성) → 녹음 → Gemini 받아쓰기(`ai.transcribe`) → 대화형 인터뷰. 키가 없으면 글 입력으로 진행
-- 지금은 `buyers.csv`에서 `source = 공공데이터`인 행(가상 학교급식센터)으로 시연
-- GAP 인증 조회: `data/public_gap.csv`를 넣으면 `public_lookup("cert", 번호)`가 찾음. 없으면 직접 입력 화면으로 넘어감
-- 실제 API로 바꿀 곳: `farm/data.py`의 `public_lookup()` 한 함수
+## 바꾼 점 (피그마 원본 대비)
+- 은퇴 농업인: 피그마의 음성 인터뷰(시연 연출)를 **실제 AI 대화형 인터뷰**로: AI 질문 → 말로 답 → 받아쓰기 → 다음 질문 → 거래처 표로 정리
+- 판로 카드·상세·추천 농가에 **AI 적합도(%)·기준별 점수** 추가
+- 예시 데이터: 나주 배 → 강원 감자·토마토(매칭 엔진 데이터와 맞춤)

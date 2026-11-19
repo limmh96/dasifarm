@@ -54,6 +54,7 @@ def load_buyers():
         extra = [json.loads(r[0]) for r in c.execute("SELECT row FROM buyers_extra")]
     if extra:
         df = pd.concat([df, pd.DataFrame(extra)], ignore_index=True)
+        df = df.drop_duplicates("name", keep="last").reset_index(drop=True)   # 장부로 다시 등록하면 새 값으로
     return _norm(df)
 
 
