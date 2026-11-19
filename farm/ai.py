@@ -44,7 +44,8 @@ def client():
         from google import genai
         from google.genai import types
         # 20초 안에 답이 없으면 포기 → 화면이 멈추지 않고 데모 모드로 이어감
-        _client = genai.Client(api_key=_key(), http_options=types.HttpOptions(timeout=20000))
+        _client = genai.Client(api_key=_key(), http_options=types.HttpOptions(
+            timeout=20000, retry_options=types.HttpRetryOptions(attempts=2)))
     return _client
 
 
