@@ -144,7 +144,7 @@ def explain(r):
                 f"항목별 근거: {r['근거']}\n부족한 조건: {r['부족한조건']}\n"
                 f"형식: '추천 이유' 2줄, '보완 방법' 1줄, '구매처에 물어볼 질문' 2개. 짧게.")
         except Exception as e:
-            return f"(AI 설명 실패: {e})\n" + _template(r)
+            return _template(r)
     return _template(r)
 
 

@@ -17,8 +17,23 @@ GRADE_NAME = {4: "특", 3: "상", 2: "중", 1: "무관"}
 CRITERIA = ["물량 안정성", "품질·규격", "가격", "납품 주기", "물류·거리", "인증·신뢰"]
 
 
+def _db_path():
+    """접속한 사람(세션)마다 따로 저장 → 다른 사람이 넣은 내용(예: asd)이 내 화면에 안 섞임"""
+    try:
+        from streamlit.runtime.scriptrunner import get_script_run_ctx
+        ctx = get_script_run_ctx()
+        if ctx is not None:
+            import tempfile
+            d = os.path.join(tempfile.gettempdir(), "dasifarm_sessions")
+            os.makedirs(d, exist_ok=True)
+            return os.path.join(d, f"{ctx.session_id}.db")
+    except Exception:
+        pass
+    return DB
+
+
 def _conn():
-    c = sqlite3.connect(DB)
+    c = sqlite3.connect(_db_path())
     c.executescript("""
     CREATE TABLE IF NOT EXISTS retirees (id INTEGER PRIMARY KEY AUTOINCREMENT, created TEXT, profile TEXT, transcript TEXT);
     CREATE TABLE IF NOT EXISTS buyers_extra (name TEXT PRIMARY KEY, row TEXT);

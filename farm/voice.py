@@ -60,11 +60,15 @@ class Interview:
         self.log = []                 # [("ai"|"me", 문장)]
         self.turn = 0
         self.done = False
+        self.fallback = ""             # AI 호출이 실패해 데모로 바뀐 이유
         if self.ai:
-            self.chat = ai.new_chat(SYSTEM)
-            self.log.append(("ai", self.chat.send_message("인터뷰를 시작해 주세요.").text.strip()))
-        else:
-            self.log.append(("ai", DEMO[0][0]))
+            try:
+                self.chat = ai.new_chat(SYSTEM)
+                self.log.append(("ai", self.chat.send_message("인터뷰를 시작해 주세요.").text.strip()))
+                return
+            except Exception as e:     # 키·모델·인터넷 문제 → 자동으로 데모 모드로 이어감
+                self.ai, self.fallback = False, str(e)[:120]
+        self.log.append(("ai", DEMO[0][0]))
 
     @property
     def question(self):
@@ -76,9 +80,13 @@ class Interview:
     def answer(self, text):
         self.log.append(("me", text))
         self.turn += 1
+        nxt = None
         if self.ai:
-            nxt = self.chat.send_message(text).text.strip()
-        else:
+            try:
+                nxt = self.chat.send_message(text).text.strip()
+            except Exception as e:
+                self.ai, self.fallback = False, str(e)[:120]
+        if nxt is None:
             nxt = DEMO[self.turn][0] if self.turn < len(DEMO) else END
         if END[:10] in nxt:
             nxt, self.done = END, True
@@ -90,7 +98,11 @@ class Interview:
     def structure(self):
         if not self.ai:
             return DEMO_RESULT
-        return ai.json_out(f"아래 인터뷰를 이 JSON 형식으로만 정리해. 모르는 값은 빈 문자열/0/빈 배열.\n{SCHEMA}\n\n{self.transcript()}")
+        try:
+            return ai.json_out(f"아래 인터뷰를 이 JSON 형식으로만 정리해. 모르는 값은 빈 문자열/0/빈 배열.\n{SCHEMA}\n\n{self.transcript()}")
+        except Exception as e:
+            self.fallback = str(e)[:120]
+            return DEMO_RESULT
 
 
 def transcribe(audio, mime):

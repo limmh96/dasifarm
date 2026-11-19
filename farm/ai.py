@@ -4,7 +4,7 @@
 import os
 import json
 
-MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")   # AI Studio에서 쓰는 모델 이름으로 바꿔도 됨
+DEFAULT_MODEL = "gemini-3.5-flash"     # Secrets의 GEMINI_MODEL로 바꿀 수 있음
 EMBED_MODEL = "gemini-embedding-001"
 
 _client = None
@@ -21,8 +21,21 @@ def _key():
         return None
 
 
+def demo_forced():
+    """주소 끝에 ?demo=1 을 붙이면 키가 있어도 데모 모드 (발표 백업용)"""
+    try:
+        import streamlit as st
+        return st.query_params.get("demo") in ("1", "true", "yes")
+    except Exception:
+        return False
+
+
 def has_ai():
-    return bool(_key())
+    return bool(_key()) and not demo_forced()
+
+
+def _model():
+    return os.environ.get("GEMINI_MODEL") or DEFAULT_MODEL
 
 
 def client():
@@ -36,7 +49,7 @@ def client():
 def new_chat(system_instruction):
     from google.genai import types
     return client().chats.create(
-        model=MODEL,
+        model=_model(),
         config=types.GenerateContentConfig(system_instruction=system_instruction, temperature=0.4),
     )
 
@@ -44,7 +57,7 @@ def new_chat(system_instruction):
 def text(prompt, temperature=0.4):
     from google.genai import types
     res = client().models.generate_content(
-        model=MODEL, contents=prompt,
+        model=_model(), contents=prompt,
         config=types.GenerateContentConfig(temperature=temperature))
     return res.text
 
@@ -53,7 +66,7 @@ def json_out(contents):
     """contents: 문자열 또는 [이미지 Part, 문자열] 목록. JSON으로만 답하게 한다."""
     from google.genai import types
     res = client().models.generate_content(
-        model=MODEL, contents=contents,
+        model=_model(), contents=contents,
         config=types.GenerateContentConfig(response_mime_type="application/json", temperature=0))
     return json.loads(res.text)
 
@@ -72,7 +85,7 @@ def transcribe(audio: bytes, mime="audio/wav"):
     """녹음 → 한국어 받아쓰기 (은퇴농 음성 인터뷰)"""
     from google.genai import types
     res = client().models.generate_content(
-        model=MODEL,
+        model=_model(),
         contents=[types.Part.from_bytes(data=audio, mime_type=mime),
                   "이 녹음은 강원도 농업인의 답변입니다. 사투리·숫자를 살려 한국어로 그대로 받아 적어 주세요. 받아 적은 문장만 출력하세요."],
         config=types.GenerateContentConfig(temperature=0))
