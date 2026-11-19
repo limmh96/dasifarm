@@ -108,7 +108,7 @@ def demo_banner():
 def page_splash():
     html('<style>[data-testid="stMainBlockContainer"]{padding:0!important}</style>'
          '<section class="splash-screen" style="height:100dvh;animation:none">'
-         '<img class="splash-logo" src="/app/static/assets/dasi-farm-logo.png" alt="다시, 팜 Dasi Farm"></section>')
+         '<img class="splash-logo" src="app/static/assets/dasi-farm-logo.png" alt="다시, 팜 Dasi Farm"></section>')
     time.sleep(2.2)
     S.page = "welcome"
     st.rerun()
@@ -117,7 +117,9 @@ def page_splash():
 def page_welcome():
     if not S.get("splashed"):            # 다시팜 시작 화면(팝업): 서버 대기 없이 CSS로 2.4초 보여주고 사라짐
         S.splashed = True
-        html('<div class="splash-pop"><img src="/app/static/assets/dasi-farm-logo.png" alt="다시, 팜 Dasi Farm"></div>')
+        # 이미지는 파일 주소 대신 글자(base64)로 직접 넣음 → 배포 환경 주소와 상관없이 항상 보임 (첫 화면 한 번만 전송)
+        html(f'<div class="splash-pop" style="background-image:url({fui.data_uri("static/assets/splash-bg.jpg")})">'
+             f'<img src="{fui.data_uri("static/assets/logo-sm.png")}" alt="다시, 팜 Dasi Farm"></div>')
     html('<style>[data-testid="stMainBlockContainer"]{background:linear-gradient(174deg,var(--farm-gradient-start) 0%,var(--farm-background) 68%)!important}</style>')
     fui.steps(1)
     html(f'<section class="welcome-hero">{fui.FARM_SVG}</section>')
