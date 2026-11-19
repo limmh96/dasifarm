@@ -146,7 +146,40 @@ div[class*="st-key-ov_"] .stButton button{opacity:0;height:100%;min-height:0}
 .st-key-typed .stButton button::after{display:none}
 .st-key-typed .stTextInput [data-baseweb="input"]{min-height:44px}
 .st-key-typed .stTextInput input{padding:10px 14px!important}
-.stApp [data-stale="true"]{display:none!important}
+.stApp [data-stale="true"]{opacity:1!important;transition:none!important;filter:none!important}
+
+/* ── 스크롤: 화면 높이를 넘는 내용은 위아래로 스크롤 */
+[data-testid="stAppViewContainer"]{height:100dvh!important;overflow:hidden!important}
+[data-testid="stMain"]{height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
+[data-testid="stMainBlockContainer"]{height:auto!important;min-height:100%!important;flex:none!important;padding-bottom:28px!important}
+
+/* ── 데스크톱: 아이폰 18 Pro(402×874) 프레임 안에 보여주기 */
+@media (min-width:600px){
+  .stApp{display:flex!important;align-items:center;justify-content:center;min-height:100dvh}
+  [data-testid="stAppViewContainer"]{position:relative!important;inset:auto!important;width:402px!important;height:min(874px,calc(100dvh - 40px))!important;
+    flex:none;border-radius:52px;box-shadow:0 0 0 11px #1d2726,0 0 0 13px #3c4746,0 30px 70px rgba(21,63,61,.35);transform:translateZ(0);background:var(--farm-background)}
+  [data-testid="stMainBlockContainer"]{max-width:402px!important;box-shadow:none!important}
+  .st-key-bnav{width:100%!important;border-radius:0 0 52px 52px;padding-bottom:20px!important}
+}
+
+/* ── 시작 화면(팝업) */
+.splash-pop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:var(--farm-splash-background-image) center/cover;
+  animation:splash-gone 2.4s ease-in-out forwards}
+.splash-pop img{width:72%;max-width:300px;opacity:0;filter:drop-shadow(0 8px 18px var(--farm-shadow));animation:splash-logo-reveal 1s cubic-bezier(.22,1,.36,1) .2s forwards;transform:translateY(12px) scale(.96)}
+@keyframes splash-gone{0%,80%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden}}
+.stApp [data-testid="stElementContainer"]:has(.splash-pop){position:absolute;height:0;margin:0}
+
+/* ── 고객 선택 화면: 한 화면(874)에 맞추기 */
+.welcome-hero{height:auto!important;padding:0!important;margin:-14px -20px -10px;overflow:visible!important}
+.welcome-hero .farm-art{width:62%;margin:0 auto;display:block}
+.welcome-title h1{font-size:27px;margin-bottom:4px}
+.welcome-title>p{font-size:14px}
+.st-key-roles{gap:10px!important}
+.st-key-roles .role-card{min-height:82px;padding:14px 13px}
+.role-help{margin-top:2px!important;font-size:12px!important}
+.st-key-wbottom{padding:16px 0 18px!important;margin:0!important;width:100%!important;border-top:0!important;box-shadow:-20px 0 0 0 var(--farm-background),20px 0 0 0 var(--farm-background)}
+.st-key-wbottom::before{content:"";position:absolute;top:0;left:-20px;right:-20px;border-top:1px solid var(--farm-border)}
+div[class*="st-key-ov_"] [data-testid="stMarkdown"],div[class*="st-key-ov_"] [data-testid="stMarkdownContainer"],div[class*="st-key-ov_"] [data-testid="stMarkdown"] > div{margin-bottom:0!important}
 .stApp h2 a,.stApp h1 a,.stApp h3 a{display:none!important}
 .market-copy h2,.goal-card h2{display:flex!important;justify-content:space-between;align-items:center}
 .market-picture .ai-badge{position:absolute;top:12px;right:12px}
@@ -158,6 +191,11 @@ div[class*="st-key-ov_"] .stButton button{opacity:0;height:100%;min-height:0}
 
 def inject():
     html("<style>" + _read("design/figma.css") + OVERRIDE + "</style>")
+
+
+def hide_stale():
+    """로딩 화면 동안 이전 화면이 아래에 남아 보이지 않게"""
+    html('<style>.stApp [data-stale="true"]{display:none!important}</style>')
 
 
 # ── 피그마 컴포넌트 (App.tsx 의 같은 이름) ──

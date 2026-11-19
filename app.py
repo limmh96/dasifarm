@@ -25,7 +25,6 @@ fui.inject()
 _button, _submit = st.button, st.form_submit_button
 st.button = lambda *a, **k: _button(*a, **{"width": "stretch", **k})
 st.form_submit_button = lambda *a, **k: _submit(*a, **{"width": "stretch", **k})
-html("<style>.stApp main{overflow:visible!important;min-height:auto!important}</style>")
 
 for k in ("GEMINI_API_KEY", "KAKAO_JS_KEY"):        # 키는 Streamlit Secrets에만
     try:
@@ -35,7 +34,7 @@ for k in ("GEMINI_API_KEY", "KAKAO_JS_KEY"):        # 키는 Streamlit Secrets�
         pass
 
 S = st.session_state
-S.setdefault("page", "splash")
+S.setdefault("page", "welcome")
 S.setdefault("role", "seller")
 S.setdefault("hist", [])
 S.setdefault("f", {})            # 가입 정보
@@ -116,25 +115,28 @@ def page_splash():
 
 
 def page_welcome():
+    if not S.get("splashed"):            # 다시팜 시작 화면(팝업): 서버 대기 없이 CSS로 2.4초 보여주고 사라짐
+        S.splashed = True
+        html('<div class="splash-pop"><img src="/app/static/assets/dasi-farm-logo.png" alt="다시, 팜 Dasi Farm"></div>')
     html('<style>[data-testid="stMainBlockContainer"]{background:linear-gradient(174deg,var(--farm-gradient-start) 0%,var(--farm-background) 68%)!important}</style>')
     fui.steps(1)
-    html(f'<section class="welcome-hero" style="margin:-19px -20px 0">{fui.FARM_SVG}</section>')
-    html('<div class="welcome-title" style="margin-bottom:-4px"><span class="eyebrow">반가워요, 다시팜이에요</span>'
+    html(f'<section class="welcome-hero">{fui.FARM_SVG}</section>')
+    html('<div class="welcome-title"><span class="eyebrow">반가워요, 다시팜이에요</span>'
          '<h1>어떤 고객이세요?</h1><p>나에게 맞는 첫걸음을 준비해 드릴게요.</p></div>')
-    for rid, t, tag, desc, ic in ROLES:
-        sel = "selected" if S.role == rid else ""
-        card = (f'<div class="role-card {rid} {sel}"><span class="role-icon">{icon(ic, 28)}</span>'
-                f'<span class="role-copy"><span class="role-title">{t}<span class="role-tag">{tag}</span></span>'
-                f'<span class="role-desc">{desc}</span></span>'
-                f'<span class="radio-circle">{icon("check", 15) if sel else ""}</span></div>')
-        fui.overlay(f"role_{rid}", card, lambda r=rid: S.update(role=r))
-    html(f'<p class="role-help" style="margin-top:-6px">{icon("leaf", 15)}‘판매처’는 농산물을 직접 판매하는 농가를 뜻해요.</p>')
+    with st.container(key="roles"):
+        for rid, t, tag, desc, ic in ROLES:
+            sel = "selected" if S.role == rid else ""
+            card = (f'<div class="role-card {rid} {sel}"><span class="role-icon">{icon(ic, 28)}</span>'
+                    f'<span class="role-copy"><span class="role-title">{t}<span class="role-tag">{tag}</span></span>'
+                    f'<span class="role-desc">{desc}</span></span>'
+                    f'<span class="radio-circle">{icon("check", 15) if sel else ""}</span></div>')
+            fui.overlay(f"role_{rid}", card, lambda r=rid: S.update(role=r))
+        html(f'<p class="role-help">{icon("leaf", 15)}‘판매처’는 농산물을 직접 판매하는 농가를 뜻해요.</p>')
     with st.container(key="wbottom"):
         st.button("다음", type="primary", key="next", on_click=go, args=("interview" if S.role == "senior" else "import",))
         html("<p>서로의 경험이 모여, 더 단단한 농업으로</p>")
 
 
-# ── 판매처·구매처 가입 (공공데이터 불러오기 → 확인 → 없는 정보 입력)
 def page_import():
     fui.steps(2)
     seller = S.role == "seller"
@@ -155,11 +157,12 @@ def page_import():
 
 
 def page_loading():
+    fui.hide_stale()
     fui.steps(2)
     html('<div class="loading-page" style="height:auto;padding:90px 0 30px"><div class="spinner"></div>'
          '<h1>기본 정보를 불러오고 있어요</h1><p>잠시만 기다려 주세요.<br>공공데이터에서 등록 정보를 찾고 있어요.</p></div>')
     fui.hint()
-    time.sleep(1.4)
+    time.sleep(0.9)
     key = S.f.get("id", "")
     hit = None if key.endswith("0000") else (public_farmer(key) if S.role == "seller" else public_buyer(key))
     if hit is None and S.role == "seller" and not key.endswith("0000"):
@@ -261,6 +264,7 @@ def page_registered():
 
 # ── AI 적합도 분석 (판매처 → 구매처)
 def fit_progress(n_targets, what):
+    fui.hide_stale()
     box = st.empty()
     labels = [f"{what} {n_targets}곳의 필수 조건(품목·인증) 확인",
               "생산량 · 품질 · 출하 시기 · 납품 주기 · 거리 · 가격 · 인증 점수 계산",
@@ -272,7 +276,7 @@ def fit_progress(n_targets, what):
         with box.container():
             html(f'<div class="loading-page" style="height:auto;padding:30px 0 10px;gap:18px"><div class="spinner"></div>'
                  f'<h1 style="font-size:24px">AI가 적합도를 분석하고 있어요</h1><div class="ai-steps">{steps_html}</div></div>')
-        time.sleep(0.45)
+        time.sleep(0.3)
     box.empty()
 
 
@@ -521,6 +525,7 @@ def page_interview():
 
 
 def page_transcribing():
+    fui.hide_stale()
     box = st.empty()
     labels = ["대화 내용 확인", "거래처마다 품목·규격·납품량·주기 찾기", "단위 맞추기 (상자→kg, 상자당→kg당)", "배송거리·정산주기까지 표로 정리"]
 
