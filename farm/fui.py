@@ -104,11 +104,12 @@ div[class*="st-key-ov_"] .stButton button{opacity:0;height:100%;min-height:0}
 .st-key-wbottom [data-testid="stMarkdownContainer"] p{text-align:center;font-size:14px;color:var(--farm-secondary-text);margin-top:12px}
 .st-key-wbottom .stButton p{color:inherit!important;font-size:16px!important;margin:0!important}
 .st-key-bnav{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:min(430px,100%);z-index:10;display:flex;flex-direction:row;gap:0;
-  background:color-mix(in srgb,var(--farm-background) 93%,transparent);border-top:1px solid var(--farm-pale-green);padding:9px 8px 13px}
+  background:var(--farm-background);border-top:1px solid var(--farm-border);padding:8px 8px max(10px,env(safe-area-inset-bottom));box-shadow:0 -4px 14px rgba(21,63,61,.06)}
 .st-key-bnav>div{flex:1}
 .nav-item{color:var(--farm-secondary-text);display:flex;flex-direction:column;gap:5px;align-items:center;padding:5px;min-height:50px;font-size:14px}
 .nav-item.active{color:var(--farm-primary-green);font-weight:600}
-.with-nav-space{height:84px}
+.with-nav-space{height:24px}
+[data-testid="stMainBlockContainer"]:has(.st-key-bnav){padding-bottom:calc(96px + env(safe-area-inset-bottom))!important}
 
 /* ── 필터 칩 */
 .st-key-filters{flex-direction:row;gap:8px;flex-wrap:wrap}
@@ -148,22 +149,27 @@ div[class*="st-key-ov_"] .stButton button{opacity:0;height:100%;min-height:0}
 .st-key-typed .stTextInput input{padding:10px 14px!important}
 .stApp [data-stale="true"]{opacity:1!important;transition:none!important;filter:none!important}
 
-/* ── 스크롤: 화면 높이를 넘는 내용은 위아래로 스크롤 */
-[data-testid="stAppViewContainer"]{height:100dvh!important;overflow:hidden!important}
-[data-testid="stMain"]{height:100%!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-[data-testid="stMainBlockContainer"]{height:auto!important;min-height:100%!important;flex:none!important;padding-bottom:28px!important}
+/* ── 스크롤: 높이를 숫자로 고정하고, 그 안(stMain)에서만 스크롤 */
+html,body{height:100%;overflow:hidden}
+.stApp{--app-h:100dvh;--app-w:100vw}
+[data-testid="stAppViewContainer"]{height:var(--app-h)!important;overflow:hidden!important}
+[data-testid="stAppViewContainer"] > div{height:var(--app-h)!important;max-height:var(--app-h)!important}
+[data-testid="stMain"]{height:var(--app-h)!important;max-height:var(--app-h)!important;overflow-y:auto!important;overflow-x:hidden!important;
+  -webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y}
+[data-testid="stMainBlockContainer"]{height:auto!important;min-height:var(--app-h)!important;flex:none!important;padding-bottom:28px!important}
 
 /* ── 데스크톱: 아이폰 18 Pro(402×874) 프레임 안에 보여주기 */
 @media (min-width:600px){
-  .stApp{display:flex!important;align-items:center;justify-content:center;min-height:100dvh}
-  [data-testid="stAppViewContainer"]{position:relative!important;inset:auto!important;width:402px!important;height:min(874px,calc(100dvh - 40px))!important;
+  .stApp{--app-h:min(874px,calc(100dvh - 40px));display:flex!important;align-items:center;justify-content:center;height:100dvh}
+  [data-testid="stAppViewContainer"]{position:relative!important;inset:auto!important;width:402px!important;
     flex:none;border-radius:52px;box-shadow:0 0 0 11px #1d2726,0 0 0 13px #3c4746,0 30px 70px rgba(21,63,61,.35);transform:translateZ(0);background:var(--farm-background)}
   [data-testid="stMainBlockContainer"]{max-width:402px!important;box-shadow:none!important}
-  .st-key-bnav{width:100%!important;border-radius:0 0 52px 52px;padding-bottom:20px!important}
+  .st-key-bnav{width:100%!important;border-radius:0 0 52px 52px;padding-bottom:22px!important}
+  [data-testid="stMainBlockContainer"]:has(.st-key-bnav){padding-bottom:110px!important}
 }
 
 /* ── 시작 화면(팝업) */
-.splash-pop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:var(--farm-splash-background-image) center/cover;
+.splash-pop{position:fixed;inset:0;z-index:1000;display:grid;place-items:center;background:#cfeeb0 center/cover no-repeat;
   animation:splash-gone 2.4s ease-in-out forwards}
 .splash-pop img{width:72%;max-width:300px;opacity:0;filter:drop-shadow(0 8px 18px var(--farm-shadow));animation:splash-logo-reveal 1s cubic-bezier(.22,1,.36,1) .2s forwards;transform:translateY(12px) scale(.96)}
 @keyframes splash-gone{0%,80%{opacity:1;visibility:visible}100%{opacity:0;visibility:hidden}}
@@ -190,7 +196,13 @@ div[class*="st-key-ov_"] [data-testid="stMarkdown"],div[class*="st-key-ov_"] [da
 
 
 def inject():
-    html("<style>" + _read("design/figma.css") + OVERRIDE + "</style>")
+    html("<style>" + _read("design/figma.css").replace("url(/app/static/", "url(app/static/") + OVERRIDE + "</style>")
+
+
+def data_uri(path):
+    import base64, mimetypes
+    mime = mimetypes.guess_type(path)[0] or "image/png"
+    return f"data:{mime};base64," + base64.b64encode(open(os.path.join(BASE, path), "rb").read()).decode()
 
 
 def hide_stale():
