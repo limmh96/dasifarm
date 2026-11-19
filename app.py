@@ -484,7 +484,131 @@ def tts_button(text, key):
       <path d="m3 9 5 0 5-5v16l-5-5H3ZM17 8c3 2 3 6 0 8M20 4c6 5 6 11 0 16"/></svg>질문 듣기</button>""", height=62)
 
 
-STT = components.declare_component("stt", path=os.path.join(os.path.dirname(os.path.abspath(__file__)), "farm", "stt"))
+# 실시간 받아쓰기 화면(브라우저 음성 인식). 파일을 따로 두지 않고 여기 글자로 넣어 두고, 실행할 때 임시 폴더에 써서 씀
+STT_HTML = r"""<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Pretendard, -apple-system, "Apple SD Gothic Neo", "Noto Sans KR", sans-serif; color: #153f3d; background: transparent; }
+  .wrap { display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 6px 2px 4px; }
+  .mic { width: 84px; height: 84px; border-radius: 50%; border: 0; cursor: pointer; display: grid; place-items: center;
+         background: #02cb71; color: #153f3d; box-shadow: 0 6px 16px rgba(21,63,61,.18); transition: transform .15s; }
+  .mic:active { transform: scale(.96); }
+  .mic.on { background: #ff6b5b; color: #fff; animation: pulse 1.2s infinite; }
+  @keyframes pulse { 0% { box-shadow: 0 0 0 0 rgba(255,107,91,.45); } 70% { box-shadow: 0 0 0 18px rgba(255,107,91,0); } 100% { box-shadow: 0 0 0 0 rgba(255,107,91,0); } }
+  .status { font-size: 15px; color: #5e716f; text-align: center; min-height: 22px; }
+  .status b { color: #153f3d; }
+  .live { width: 100%; min-height: 64px; border: 1px solid #dfe8d5; border-radius: 13px; padding: 13px 14px; font-size: 16px; line-height: 1.6;
+          background: #fff; word-break: keep-all; }
+  .live .interim { color: #8aa09d; }
+  .live.empty { color: #9aaba8; }
+  .row { display: flex; gap: 8px; width: 100%; }
+  .btn { flex: 1; min-height: 50px; border-radius: 13px; font: 600 16px inherit; font-family: inherit; cursor: pointer; }
+  .send { background: #02cb71; border: 1px solid #02cb71; color: #153f3d; }
+  .redo { background: #fff; border: 1px solid #dfe8d5; color: #153f3d; flex: 0 0 34%; }
+  .hide { display: none !important; }
+  .warn { font-size: 14px; color: #b95145; text-align: center; line-height: 1.6; }
+</style>
+</head>
+<body>
+<div class="wrap" id="wrap">
+  <button class="mic" id="mic" aria-label="말하기 시작">
+    <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="8" y="2" width="8" height="14" rx="4"/><path d="M4 11a8 8 0 0 0 16 0M12 19v3M8 22h8"/></svg>
+  </button>
+  <p class="status" id="status">마이크를 누르고 말씀해 주세요</p>
+  <div class="live empty" id="live">말씀하시면 여기에 바로 글자로 적혀요</div>
+  <div class="row hide" id="actions">
+    <button class="btn redo" id="redo">다시 말하기</button>
+    <button class="btn send" id="send">이렇게 답하기</button>
+  </div>
+  <p class="warn hide" id="warn"></p>
+</div>
+<script>
+// ── Streamlit 컴포넌트 통신 (빌드 없이 쓰는 최소 구현)
+function post(type, data) { window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, data || {}), "*"); }
+function setValue(v) { post("streamlit:setComponentValue", { value: v, dataType: "json" }); }
+function fit() { post("streamlit:setFrameHeight", { height: document.getElementById("wrap").scrollHeight + 8 }); }
+window.addEventListener("message", function (e) { if (e.data && e.data.type === "streamlit:render") fit(); });
+post("streamlit:componentReady", { apiVersion: 1 });
+
+// ── 브라우저 음성 인식 (키 없이 동작: 크롬·사파리·삼성인터넷)
+var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+var mic = document.getElementById("mic"), statusEl = document.getElementById("status"), live = document.getElementById("live");
+var actions = document.getElementById("actions"), warn = document.getElementById("warn");
+var rec = null, listening = false, finalText = "", interim = "";
+
+function render() {
+  var t = (finalText + " " + interim).trim();
+  if (!t) { live.className = "live empty"; live.textContent = listening ? "듣고 있어요…" : "말씀하시면 여기에 바로 글자로 적혀요"; }
+  else { live.className = "live"; live.innerHTML = ""; live.appendChild(document.createTextNode(finalText + " "));
+         var s = document.createElement("span"); s.className = "interim"; s.textContent = interim; live.appendChild(s); }
+  actions.classList.toggle("hide", listening || !finalText.trim());
+  fit();
+}
+function showWarn(msg) { warn.textContent = msg; warn.classList.remove("hide"); fit(); }
+
+if (!SR) {
+  mic.disabled = true; mic.style.opacity = .4;
+  statusEl.textContent = "이 브라우저는 실시간 받아쓰기를 지원하지 않아요";
+  showWarn("아래 '녹음 파일로 보내기'를 쓰거나, 크롬·사파리로 열어 주세요.");
+  setValue({ unsupported: true });
+} else {
+  rec = new SR();
+  rec.lang = "ko-KR"; rec.interimResults = true; rec.continuous = true; rec.maxAlternatives = 1;
+  rec.onresult = function (e) {
+    interim = "";
+    for (var i = e.resultIndex; i < e.results.length; i++) {
+      var r = e.results[i];
+      if (r.isFinal) finalText += r[0].transcript; else interim += r[0].transcript;
+    }
+    render();
+  };
+  rec.onerror = function (e) {
+    if (e.error === "not-allowed" || e.error === "service-not-allowed") showWarn("마이크 권한이 꺼져 있어요. 주소창의 자물쇠 → 마이크 '허용' 후 다시 눌러 주세요.");
+    else if (e.error === "no-speech") showWarn("소리가 들리지 않았어요. 조금 더 크게 말씀해 주세요.");
+    else if (e.error === "network") showWarn("음성 인식 연결이 안 돼요. 인터넷을 확인하거나 아래 글 입력을 써 주세요.");
+  };
+  rec.onend = function () {
+    listening = false; mic.classList.remove("on"); interim = "";
+    statusEl.innerHTML = finalText.trim() ? "<b>맞게 적혔으면</b> ‘이렇게 답하기’를 눌러 주세요" : "마이크를 누르고 말씀해 주세요";
+    render();
+  };
+  mic.onclick = function () {
+    warn.classList.add("hide");
+    if (listening) { rec.stop(); return; }
+    try { rec.start(); } catch (err) { return; }
+    listening = true; mic.classList.add("on");
+    statusEl.innerHTML = "<b>듣고 있어요.</b> 다 말씀하시면 버튼을 한 번 더 눌러 주세요";
+    render();
+  };
+  document.getElementById("redo").onclick = function () { finalText = ""; interim = ""; render(); mic.click(); };
+  document.getElementById("send").onclick = function () {
+    var t = finalText.trim(); if (!t) return;
+    setValue({ text: t, id: Date.now() });
+    statusEl.innerHTML = "<b>보냈어요.</b> AI가 다음 질문을 준비해요";
+    actions.classList.add("hide"); fit();
+  };
+}
+render();
+</script>
+</body>
+</html>
+"""
+
+
+def _stt_component():
+    import tempfile
+    d = os.path.join(tempfile.gettempdir(), "dasifarm_stt")
+    os.makedirs(d, exist_ok=True)
+    with open(os.path.join(d, "index.html"), "w", encoding="utf-8") as f:
+        f.write(STT_HTML)
+    return components.declare_component("stt", path=d)
+
+
+STT = _stt_component()
 
 
 def reply(iv, text):
